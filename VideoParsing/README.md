@@ -1,6 +1,6 @@
 # VideoParsing - GCP Video Processing Pipeline
 
-Automated pipeline that processes videos uploaded to a GCS bucket. Videos are segmented, upscaled, slowed down, analyzed by Gemini 2.5 Pro for metadata extraction, and results are stored in BigQuery.
+Automated pipeline that processes horse racing videos uploaded to a GCS bucket. Videos are segmented by distance markers (1200m, 1000m, 800m, etc.) using Gemini vision, upscaled, slowed down, analyzed by Gemini 2.5 Pro for metadata extraction, and results are stored in BigQuery.
 
 ## Architecture
 
@@ -11,12 +11,14 @@ Pub/Sub Topic
     |  Push subscription (authenticated)
 Cloud Run Service (Python/Flask)
     |-- Download video from GCS
-    |-- FFmpeg: segment into 30s chunks
+    |-- Gemini 2.5 Pro: detect distance markers (1000m, 800m, etc.)
+    |-- FFmpeg: segment at distance marker timestamps
+    |   (fallback: fixed 30s chunks if no markers detected)
     |-- FFmpeg: upscale (lanczos to 1920x1080)
     |-- FFmpeg: slow down (2x via setpts/atempo)
     |-- Upload processed segments to GCS
     |-- Gemini 2.5 Pro: extract metadata per segment
-    +-- Write metadata to BigQuery
+    +-- Write metadata to BigQuery (with distance_marker)
 ```
 
 ## Project Structure
@@ -27,7 +29,7 @@ VideoParsing/
 │   ├── main.py              # Flask endpoint, orchestration logic
 │   ├── config.py            # Environment-based configuration
 │   ├── video_processor.py   # FFmpeg: download, segment, upscale, slow, upload
-│   ├── gemini_extractor.py  # Gemini API metadata extraction
+│   ├── gemini_extractor.py  # Gemini API: distance marker detection + metadata extraction
 │   └── bq_writer.py         # BigQuery schema creation and writes
 ├── deploy/
 │   ├── setup.sh             # Create GCS, Pub/Sub, BQ, service account, APIs
@@ -92,16 +94,27 @@ gcloud run services logs read video-pipeline --region=<REGION> --project=<PROJEC
 Query results in BigQuery:
 
 ```sql
-SELECT * FROM video_metadata.segments ORDER BY video_id, segment_index
+SELECT video_id, segment_index, distance_marker, description
+FROM video_metadata.segments
+ORDER BY video_id, segment_index
 ```
 
 ## Pipeline Details
+
+### Segmentation Modes
+
+The pipeline supports two segmentation modes controlled by the `SEGMENT_MODE` env var:
+
+**Distance-based (default):** Sends the full video to Gemini to detect distance markers on the track (e.g., 1000m, 800m, 600m). FFmpeg then cuts the video at the detected timestamps using `-ss` and `-to`. Each segment corresponds to the section of the race between two distance markers. Falls back to time-based segmentation if no markers are detected.
+
+**Time-based (fallback):** Splits the video into fixed-duration chunks (default 30s) using FFmpeg's `-f segment -segment_time`.
 
 ### FFmpeg Processing
 
 | Step | Command | Details |
 |------|---------|---------|
-| Segment | `-f segment -segment_time 30` | Splits video into 30s chunks |
+| Segment (distance) | `-ss <start> -to <end> -c copy` | Cuts between distance marker timestamps |
+| Segment (time) | `-f segment -segment_time 30` | Fallback: splits into 30s chunks |
 | Upscale | `-vf scale=1920:1080:flags=lanczos` | Skipped if already >= target resolution |
 | Slow down | `-vf setpts=2.0*PTS -af atempo=0.5` | 2x slowdown with audio pitch correction |
 
@@ -129,6 +142,7 @@ Each segment is sent to Gemini 2.5 Pro via Vertex AI, which extracts:
 | key_moments | RECORD (REPEATED) | Key moments (timestamp, description) |
 | processed_at | TIMESTAMP | Processing timestamp |
 | duration_sec | FLOAT | Segment duration in seconds |
+| distance_marker | STRING | Distance marker label (e.g., "1000m", "800m") |
 
 ## Configuration
 
@@ -144,7 +158,8 @@ All settings are configurable via environment variables:
 | BQ_TABLE | segments | BigQuery table name |
 | GEMINI_MODEL | gemini-2.5-pro | Gemini model for metadata extraction |
 | GEMINI_LOCATION | us-central1 | Region for Gemini API calls |
-| SEGMENT_DURATION_SEC | 30 | Segment length in seconds |
+| SEGMENT_MODE | distance | Segmentation mode: "distance" or "time" |
+| SEGMENT_DURATION_SEC | 30 | Segment length in seconds (time mode only) |
 | UPSCALE_RESOLUTION | 1920:1080 | Target upscale resolution |
 | SLOWDOWN_FACTOR | 2.0 | Video slowdown multiplier |
 
