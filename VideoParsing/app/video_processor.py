@@ -86,14 +86,14 @@ def segment_video(input_path: str, output_dir: str) -> list[str]:
 
 def segment_video_by_timestamps(
     input_path: str, output_dir: str, markers: list[dict]
-) -> list[tuple[str, str]]:
+) -> list[tuple[str, str, float, float]]:
     """Cut video at distance marker timestamps.
 
-    Returns list of (segment_path, distance_marker) tuples.
+    Returns list of (segment_path, distance_marker, start_sec, end_sec) tuples.
     """
     os.makedirs(output_dir, exist_ok=True)
     duration = _get_duration(input_path)
-    results: list[tuple[str, str]] = []
+    results: list[tuple[str, str, float, float]] = []
 
     # Build time boundaries from markers
     # Each segment spans from one marker to the next
@@ -119,7 +119,7 @@ def segment_video_by_timestamps(
             "-reset_timestamps", "1",
             seg_path,
         ])
-        results.append((seg_path, label))
+        results.append((seg_path, label, start, end))
 
     logger.info("Created %d distance-based segments", len(results))
     return results

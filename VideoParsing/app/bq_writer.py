@@ -25,6 +25,8 @@ SCHEMA = [
     bigquery.SchemaField("processed_at", "TIMESTAMP", mode="REQUIRED"),
     bigquery.SchemaField("duration_sec", "FLOAT"),
     bigquery.SchemaField("distance_marker", "STRING"),
+    bigquery.SchemaField("video_start_sec", "FLOAT"),
+    bigquery.SchemaField("video_end_sec", "FLOAT"),
 ]
 
 
@@ -74,6 +76,8 @@ def write_segment_metadata(
     metadata: dict,
     duration_sec: float,
     distance_marker: str | None = None,
+    video_start_sec: float | None = None,
+    video_end_sec: float | None = None,
 ) -> None:
     client = _get_client()
     table_id = f"{Config.PROJECT_ID}.{Config.BQ_DATASET}.{Config.BQ_TABLE}"
@@ -96,6 +100,8 @@ def write_segment_metadata(
         "processed_at": datetime.datetime.utcnow().isoformat(),
         "duration_sec": duration_sec,
         "distance_marker": distance_marker,
+        "video_start_sec": video_start_sec,
+        "video_end_sec": video_end_sec,
     }
 
     errors = client.insert_rows_json(table_id, [row])

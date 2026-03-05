@@ -85,19 +85,19 @@ def handle_pubsub():
             else:
                 logger.warning("No distance markers detected, falling back to time-based segmentation")
                 segment_paths = segment_video(input_path, segments_dir)
-                segment_results = [(p, None) for p in segment_paths]
+                segment_results = [(p, None, None, None) for p in segment_paths]
         else:
             # Fallback: time-based segmentation
             segment_paths = segment_video(input_path, segments_dir)
-            segment_results = [(p, None) for p in segment_paths]
+            segment_results = [(p, None, None, None) for p in segment_paths]
 
         if not segment_results:
             logger.warning("No segments created for %s", object_name)
             return "No segments", 200
 
         # Process each segment: upscale + slow down + upload + gemini + bigquery
-        for idx, (seg_path, distance_marker) in enumerate(segment_results):
-            logger.info("Processing segment %d/%d: %s (marker: %s)", idx + 1, len(segment_results), seg_path, distance_marker)
+        for idx, (seg_path, distance_marker, video_start, video_end) in enumerate(segment_results):
+            logger.info("Processing segment %d/%d: %s (marker: %s, %.1f-%.1fs)", idx + 1, len(segment_results), seg_path, distance_marker, video_start or 0, video_end or 0)
 
             processed_path = process_segment(seg_path, work_dir, idx)
 
@@ -112,7 +112,7 @@ def handle_pubsub():
             duration = get_duration(processed_path)
 
             # Write to BigQuery
-            write_segment_metadata(video_id, idx, gcs_uri, metadata, duration, distance_marker=distance_marker)
+            write_segment_metadata(video_id, idx, gcs_uri, metadata, duration, distance_marker=distance_marker, video_start_sec=video_start, video_end_sec=video_end)
 
         logger.info("Successfully processed all %d segments for %s", len(segment_results), video_id)
         return "OK", 200
