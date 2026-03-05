@@ -143,6 +143,8 @@ Each segment is sent to Gemini 2.5 Pro via Vertex AI, which extracts:
 | processed_at | TIMESTAMP | Processing timestamp |
 | duration_sec | FLOAT | Segment duration in seconds |
 | distance_marker | STRING | Distance marker label (e.g., "1000m", "800m") |
+| video_start_sec | FLOAT | Segment start time in the original video |
+| video_end_sec | FLOAT | Segment end time in the original video |
 
 ## Configuration
 
