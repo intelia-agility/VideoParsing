@@ -13,3 +13,4 @@ class Config:
     SEGMENT_DURATION_SEC = int(os.environ.get("SEGMENT_DURATION_SEC", "30"))
     UPSCALE_RESOLUTION = os.environ.get("UPSCALE_RESOLUTION", "1920:1080")
     SLOWDOWN_FACTOR = float(os.environ.get("SLOWDOWN_FACTOR", "2.0"))
+    SEGMENT_MODE = os.environ.get("SEGMENT_MODE", "distance")  # "distance" or "time"

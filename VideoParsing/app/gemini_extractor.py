@@ -62,6 +62,58 @@ def _extract_with_retry(client: genai.Client, video_path: str, gcs_uri: str | No
                 raise
 
 
+DISTANCE_MARKER_PROMPT = """Analyze this horse racing video and identify all visible distance markers on the track.
+
+Common distance markers include: 1200m, 1000m, 800m, 600m, 400m, 200m (and others depending on the race).
+
+For each distance marker you can identify, return the timestamp (in seconds) when the leading horses pass that marker.
+
+Return a JSON array of objects, each with:
+- "distance": the distance marker label (e.g. "1200m", "1000m", "800m")
+- "timestamp": the time in seconds when horses pass this marker
+
+Sort by timestamp ascending. Return ONLY valid JSON, no markdown fences.
+Example: [{"distance": "1200m", "timestamp": 5.0}, {"distance": "1000m", "timestamp": 18.5}]
+
+If no distance markers are visible, return an empty array: []"""
+
+
+def detect_distance_markers(video_path: str, gcs_uri: str | None = None) -> list[dict]:
+    """Send full video to Gemini to detect distance marker timestamps."""
+    client = _create_client()
+
+    if gcs_uri:
+        logger.info("Using GCS URI for distance marker detection: %s", gcs_uri)
+        video_part = types.Part.from_uri(file_uri=gcs_uri, mime_type="video/mp4")
+    else:
+        with open(video_path, "rb") as f:
+            video_bytes = f.read()
+        video_part = types.Part.from_bytes(data=video_bytes, mime_type="video/mp4")
+
+    for attempt in range(1, 4):
+        try:
+            response = client.models.generate_content(
+                model=Config.GEMINI_MODEL,
+                contents=[video_part, DISTANCE_MARKER_PROMPT],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                ),
+            )
+            markers = json.loads(response.text)
+            markers.sort(key=lambda m: m["timestamp"])
+            logger.info("Detected distance markers: %s", markers)
+            return markers
+        except Exception as e:
+            error_str = str(e)
+            is_retryable = "429" in error_str or "503" in error_str or "RESOURCE_EXHAUSTED" in error_str
+            if is_retryable and attempt < 3:
+                wait = 2 ** attempt
+                logger.warning("Retryable error (attempt %d/3), waiting %ds: %s", attempt, wait, e)
+                time.sleep(wait)
+            else:
+                raise
+
+
 def extract_metadata(video_path: str, gcs_uri: str | None = None) -> dict:
     client = _create_client()
     metadata = _extract_with_retry(client, video_path, gcs_uri=gcs_uri)

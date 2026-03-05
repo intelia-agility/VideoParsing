@@ -10,12 +10,13 @@ from flask import Flask, request
 
 from app.bq_writer import ensure_table_exists, is_video_processed, write_segment_metadata
 from app.config import Config
-from app.gemini_extractor import extract_metadata
+from app.gemini_extractor import detect_distance_markers, extract_metadata
 from app.video_processor import (
     download_video,
     get_duration,
     process_segment,
     segment_video,
+    segment_video_by_timestamps,
     upload_file,
 )
 
@@ -74,15 +75,29 @@ def handle_pubsub():
 
         # Segment
         segments_dir = os.path.join(work_dir, "segments")
-        segment_paths = segment_video(input_path, segments_dir)
+        input_gcs_uri = f"gs://{bucket_name}/{object_name}"
 
-        if not segment_paths:
+        if Config.SEGMENT_MODE == "distance":
+            # Pass 1: Detect distance markers via Gemini
+            markers = detect_distance_markers(input_path, gcs_uri=input_gcs_uri)
+            if markers:
+                segment_results = segment_video_by_timestamps(input_path, segments_dir, markers)
+            else:
+                logger.warning("No distance markers detected, falling back to time-based segmentation")
+                segment_paths = segment_video(input_path, segments_dir)
+                segment_results = [(p, None) for p in segment_paths]
+        else:
+            # Fallback: time-based segmentation
+            segment_paths = segment_video(input_path, segments_dir)
+            segment_results = [(p, None) for p in segment_paths]
+
+        if not segment_results:
             logger.warning("No segments created for %s", object_name)
             return "No segments", 200
 
         # Process each segment: upscale + slow down + upload + gemini + bigquery
-        for idx, seg_path in enumerate(segment_paths):
-            logger.info("Processing segment %d/%d: %s", idx + 1, len(segment_paths), seg_path)
+        for idx, (seg_path, distance_marker) in enumerate(segment_results):
+            logger.info("Processing segment %d/%d: %s (marker: %s)", idx + 1, len(segment_results), seg_path, distance_marker)
 
             processed_path = process_segment(seg_path, work_dir, idx)
 
@@ -97,9 +112,9 @@ def handle_pubsub():
             duration = get_duration(processed_path)
 
             # Write to BigQuery
-            write_segment_metadata(video_id, idx, gcs_uri, metadata, duration)
+            write_segment_metadata(video_id, idx, gcs_uri, metadata, duration, distance_marker=distance_marker)
 
-        logger.info("Successfully processed all %d segments for %s", len(segment_paths), video_id)
+        logger.info("Successfully processed all %d segments for %s", len(segment_results), video_id)
         return "OK", 200
 
     except Exception:

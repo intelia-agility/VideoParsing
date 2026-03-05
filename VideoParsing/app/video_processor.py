@@ -84,6 +84,47 @@ def segment_video(input_path: str, output_dir: str) -> list[str]:
     return [str(s) for s in segments]
 
 
+def segment_video_by_timestamps(
+    input_path: str, output_dir: str, markers: list[dict]
+) -> list[tuple[str, str]]:
+    """Cut video at distance marker timestamps.
+
+    Returns list of (segment_path, distance_marker) tuples.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    duration = _get_duration(input_path)
+    results: list[tuple[str, str]] = []
+
+    # Build time boundaries from markers
+    # Each segment spans from one marker to the next
+    timestamps = [m["timestamp"] for m in markers]
+    labels = [m["distance"] for m in markers]
+
+    # Add boundaries: start of video and end of video
+    boundaries = [0.0] + timestamps + [duration]
+    segment_labels = ["pre_" + labels[0] if labels else "full"] + labels + ["post_" + labels[-1] if labels else "full"]
+
+    for i in range(len(boundaries) - 1):
+        start = boundaries[i]
+        end = boundaries[i + 1]
+        if end <= start:
+            continue
+        label = segment_labels[i]
+        seg_path = os.path.join(output_dir, f"segment_{i:04d}.mp4")
+        _run_ffmpeg([
+            "-i", input_path,
+            "-ss", str(start),
+            "-to", str(end),
+            "-c", "copy",
+            "-reset_timestamps", "1",
+            seg_path,
+        ])
+        results.append((seg_path, label))
+
+    logger.info("Created %d distance-based segments", len(results))
+    return results
+
+
 def upscale_video(input_path: str, output_path: str) -> str:
     target_w, target_h = (int(x) for x in Config.UPSCALE_RESOLUTION.split(":"))
     current_w, current_h = _get_resolution(input_path)
