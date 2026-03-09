@@ -76,11 +76,17 @@ def handle_pubsub():
         # Segment
         segments_dir = os.path.join(work_dir, "segments")
         input_gcs_uri = f"gs://{bucket_name}/{object_name}"
+        saddlecloth_lookup = {}
 
         if Config.SEGMENT_MODE == "distance":
             # Pass 1: Detect distance markers via Gemini
             markers = detect_distance_markers(input_path, gcs_uri=input_gcs_uri)
             if markers:
+                # Build lookup: distance label -> saddlecloth_positions
+                saddlecloth_lookup = {
+                    m["distance"]: m.get("saddlecloth_positions", [])
+                    for m in markers
+                }
                 segment_results = segment_video_by_timestamps(input_path, segments_dir, markers)
             else:
                 logger.warning("No distance markers detected, falling back to time-based segmentation")
@@ -111,8 +117,11 @@ def handle_pubsub():
             # Get duration
             duration = get_duration(processed_path)
 
+            # Look up saddlecloth positions for this segment's distance marker
+            sc_positions = saddlecloth_lookup.get(distance_marker, []) if distance_marker else []
+
             # Write to BigQuery
-            write_segment_metadata(video_id, idx, gcs_uri, metadata, duration, distance_marker=distance_marker, video_start_sec=video_start, video_end_sec=video_end)
+            write_segment_metadata(video_id, idx, gcs_uri, metadata, duration, distance_marker=distance_marker, video_start_sec=video_start, video_end_sec=video_end, saddlecloth_positions=sc_positions or None)
 
         logger.info("Successfully processed all %d segments for %s", len(segment_results), video_id)
         return "OK", 200

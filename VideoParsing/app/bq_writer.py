@@ -27,6 +27,11 @@ SCHEMA = [
     bigquery.SchemaField("distance_marker", "STRING"),
     bigquery.SchemaField("video_start_sec", "FLOAT"),
     bigquery.SchemaField("video_end_sec", "FLOAT"),
+    bigquery.SchemaField("saddlecloth_positions", "RECORD", mode="REPEATED", fields=[
+        bigquery.SchemaField("saddlecloth", "INTEGER"),
+        bigquery.SchemaField("position", "INTEGER"),
+        bigquery.SchemaField("margin", "STRING"),
+    ]),
 ]
 
 
@@ -78,6 +83,7 @@ def write_segment_metadata(
     distance_marker: str | None = None,
     video_start_sec: float | None = None,
     video_end_sec: float | None = None,
+    saddlecloth_positions: list[dict] | None = None,
 ) -> None:
     client = _get_client()
     table_id = f"{Config.PROJECT_ID}.{Config.BQ_DATASET}.{Config.BQ_TABLE}"
@@ -102,6 +108,14 @@ def write_segment_metadata(
         "distance_marker": distance_marker,
         "video_start_sec": video_start_sec,
         "video_end_sec": video_end_sec,
+        "saddlecloth_positions": [
+            {
+                "saddlecloth": p.get("saddlecloth"),
+                "position": p.get("position"),
+                "margin": p.get("margin"),
+            }
+            for p in (saddlecloth_positions or [])
+        ],
     }
 
     errors = client.insert_rows_json(table_id, [row])
