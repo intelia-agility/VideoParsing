@@ -7,6 +7,23 @@ from app.config import Config
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_float_timestamp(value) -> float:
+    """Convert a timestamp value to float, handling 'MM:SS' or 'HH:MM:SS' strings."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        parts = value.split(":")
+        try:
+            if len(parts) == 2:
+                return float(parts[0]) * 60 + float(parts[1])
+            if len(parts) == 3:
+                return float(parts[0]) * 3600 + float(parts[1]) * 60 + float(parts[2])
+            return float(value)
+        except ValueError:
+            return 0.0
+    return 0.0
+
 SCHEMA = [
     bigquery.SchemaField("video_id", "STRING", mode="REQUIRED"),
     bigquery.SchemaField("segment_index", "INTEGER", mode="REQUIRED"),
@@ -95,12 +112,12 @@ def write_segment_metadata(
         "description": metadata.get("description", ""),
         "objects": metadata.get("objects", []),
         "scenes": [
-            {"timestamp": s.get("timestamp", 0.0), "description": s.get("description", "")}
+            {"timestamp": _safe_float_timestamp(s.get("timestamp", 0.0)), "description": s.get("description", "")}
             for s in metadata.get("scenes", [])
         ],
         "transcript": metadata.get("transcript", ""),
         "key_moments": [
-            {"timestamp": m.get("timestamp", 0.0), "description": m.get("description", "")}
+            {"timestamp": _safe_float_timestamp(m.get("timestamp", 0.0)), "description": m.get("description", "")}
             for m in metadata.get("key_moments", [])
         ],
         "processed_at": datetime.datetime.utcnow().isoformat(),
