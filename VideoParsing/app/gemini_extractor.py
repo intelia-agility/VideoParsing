@@ -68,8 +68,9 @@ Common distance markers include: 1200m, 1000m, 800m, 600m, 400m, 200m (and other
 
 For each distance marker you can identify, return the timestamp (in seconds) when the leading horses pass that marker.
 
-For each distance marker, also identify the order of horses by their saddlecloth numbers
-and the margin (in lengths) between each horse and the one in front.
+For each distance marker, also identify the order of horses by their saddlecloth numbers,
+the margin (in lengths) between each horse and the one in front, and how many lanes wide
+from the inside rail the horse is running (1 = on the rail, 2 = one off the rail, etc.).
 
 Return a JSON array of objects, each with:
 - "distance": the distance marker label (e.g. "1200m", "1000m", "800m")
@@ -77,7 +78,8 @@ Return a JSON array of objects, each with:
 - "saddlecloth_positions": an array of objects, each with:
     - "saddlecloth": the saddlecloth number (integer)
     - "position": the position of the horse (1 = leading, 2 = second, etc.)
-    - "margin": the margin in lengths to the horse in front (e.g. "1L", "0.5L"), null for the leader
+    - "margin": the margin in lengths to the horse in front (e.g. "1L", "0.5L", "Neck", "Head", "Nose"), null for the leader
+    - "lanes_wide": how many lanes wide from the inside rail (integer, 1 = on the rail), null if not visible
 
 Sort by timestamp ascending. Return ONLY valid JSON, no markdown fences.
 Example:
@@ -86,9 +88,9 @@ Example:
     "distance": "1200m",
     "timestamp": 5.0,
     "saddlecloth_positions": [
-      {"saddlecloth": 3, "position": 1, "margin": null},
-      {"saddlecloth": 7, "position": 2, "margin": "1L"},
-      {"saddlecloth": 1, "position": 3, "margin": "0.5L"}
+      {"saddlecloth": 3, "position": 1, "margin": null, "lanes_wide": 1},
+      {"saddlecloth": 7, "position": 2, "margin": "1L", "lanes_wide": 3},
+      {"saddlecloth": 1, "position": 3, "margin": "0.5L", "lanes_wide": 2}
     ]
   }
 ]

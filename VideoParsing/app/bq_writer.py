@@ -48,6 +48,7 @@ SCHEMA = [
         bigquery.SchemaField("saddlecloth", "INTEGER"),
         bigquery.SchemaField("position", "INTEGER"),
         bigquery.SchemaField("margin", "STRING"),
+        bigquery.SchemaField("lanes_wide", "INTEGER"),
     ]),
 ]
 
@@ -130,6 +131,7 @@ def write_segment_metadata(
                 "saddlecloth": p.get("saddlecloth"),
                 "position": p.get("position"),
                 "margin": p.get("margin"),
+                "lanes_wide": p.get("lanes_wide"),
             }
             for p in (saddlecloth_positions or [])
         ],
