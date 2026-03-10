@@ -11,14 +11,14 @@ Pub/Sub Topic
     |  Push subscription (authenticated)
 Cloud Run Service (Python/Flask)
     |-- Download video from GCS
-    |-- Gemini 2.5 Pro: detect distance markers (1000m, 800m, etc.)
+    |-- Gemini 2.5 Pro: detect distance markers + saddlecloth positions
     |-- FFmpeg: segment at distance marker timestamps
     |   (fallback: fixed 30s chunks if no markers detected)
     |-- FFmpeg: upscale (lanczos to 1920x1080)
     |-- FFmpeg: slow down (2x via setpts/atempo)
     |-- Upload processed segments to GCS
     |-- Gemini 2.5 Pro: extract metadata per segment
-    +-- Write metadata to BigQuery (with distance_marker)
+    +-- Write metadata to BigQuery (with saddlecloth positions)
 ```
 
 ## Project Structure
@@ -94,7 +94,7 @@ gcloud run services logs read video-pipeline --region=<REGION> --project=<PROJEC
 Query results in BigQuery:
 
 ```sql
-SELECT video_id, segment_index, distance_marker, description
+SELECT video_id, segment_index, distance_marker, saddlecloth_positions
 FROM video_metadata.segments
 ORDER BY video_id, segment_index
 ```
@@ -105,7 +105,7 @@ ORDER BY video_id, segment_index
 
 The pipeline supports two segmentation modes controlled by the `SEGMENT_MODE` env var:
 
-**Distance-based (default):** Sends the full video to Gemini to detect distance markers on the track (e.g., 1000m, 800m, 600m). FFmpeg then cuts the video at the detected timestamps using `-ss` and `-to`. Each segment corresponds to the section of the race between two distance markers. Falls back to time-based segmentation if no markers are detected.
+**Distance-based (default):** Sends the full video to Gemini to detect distance markers on the track (e.g., 1000m, 800m, 600m or 1/4 Mile, 1/2 Mile, etc.). Gemini also identifies saddlecloth positions, margins, and lanes wide at each marker. FFmpeg then cuts the video at the detected timestamps using `-ss` and `-to`. Each segment corresponds to the section of the race between two distance markers. Falls back to time-based segmentation if no markers are detected.
 
 **Time-based (fallback):** Splits the video into fixed-duration chunks (default 30s) using FFmpeg's `-f segment -segment_time`.
 
@@ -117,6 +117,17 @@ The pipeline supports two segmentation modes controlled by the `SEGMENT_MODE` en
 | Segment (time) | `-f segment -segment_time 30` | Fallback: splits into 30s chunks |
 | Upscale | `-vf scale=1920:1080:flags=lanczos` | Skipped if already >= target resolution |
 | Slow down | `-vf setpts=2.0*PTS -af atempo=0.5` | 2x slowdown with audio pitch correction |
+
+### Saddlecloth Position Detection
+
+During distance marker detection, Gemini also identifies horse positions at each marker:
+
+- **saddlecloth** - the horse's saddlecloth number
+- **position** - finishing order at that point (1 = leading)
+- **margin** - distance to the horse in front (e.g., "1L", "0.5L", "Neck", "Head", "Nose"), null for the leader
+- **lanes_wide** - how many lanes wide from the inside rail (1 = on the rail), null if not visible
+
+This enables race analysis such as tracking position changes, identifying ground loss from running wide, and comparing margins across distance points.
 
 ### Gemini Metadata Extraction
 
@@ -145,6 +156,11 @@ Each segment is sent to Gemini 2.5 Pro via Vertex AI, which extracts:
 | distance_marker | STRING | Distance marker label (e.g., "1000m", "800m") |
 | video_start_sec | FLOAT | Segment start time in the original video |
 | video_end_sec | FLOAT | Segment end time in the original video |
+| saddlecloth_positions | RECORD (REPEATED) | Horse positions at this distance marker |
+| saddlecloth_positions.saddlecloth | INTEGER | Saddlecloth number |
+| saddlecloth_positions.position | INTEGER | Position (1 = leading) |
+| saddlecloth_positions.margin | STRING | Margin to horse in front (e.g., "1L", "Neck") |
+| saddlecloth_positions.lanes_wide | INTEGER | Lanes wide from inside rail (1 = on rail) |
 
 ## Configuration
 
