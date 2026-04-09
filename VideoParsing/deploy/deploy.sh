@@ -4,7 +4,7 @@ set -euo pipefail
 #############################
 # CONFIGURATION — EDIT THESE
 #############################
-PROJECT_ID="rfp-accelerator-agent"
+PROJECT_ID="ramv-sandpit"
 REGION="australia-southeast1"
 INPUT_BUCKET="${PROJECT_ID}-video-input"
 OUTPUT_BUCKET="${PROJECT_ID}-video-output"

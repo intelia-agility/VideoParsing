@@ -4,7 +4,7 @@ set -euo pipefail
 #############################
 # CONFIGURATION — EDIT THESE
 #############################
-PROJECT_ID="rfp-accelerator-agent"
+PROJECT_ID="ramv-sandpit"
 REGION="australia-southeast1"
 INPUT_BUCKET="${PROJECT_ID}-video-input"
 OUTPUT_BUCKET="${PROJECT_ID}-video-output"
@@ -39,7 +39,8 @@ for ROLE in \
   roles/storage.objectAdmin \
   roles/bigquery.dataEditor \
   roles/bigquery.jobUser \
-  roles/run.invoker; do
+  roles/run.invoker \
+  roles/aiplatform.user; do
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="${ROLE}" \
