@@ -39,7 +39,8 @@ for ROLE in \
   roles/storage.objectAdmin \
   roles/bigquery.dataEditor \
   roles/bigquery.jobUser \
-  roles/run.invoker; do
+  roles/run.invoker \
+  roles/aiplatform.user; do
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="${ROLE}" \
